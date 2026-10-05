@@ -1,9 +1,9 @@
 # csmju-intern-sync
 
-InternSync — ระบบย่อยของโครงการ CSMJU2030
+InternSync – ระบบย่อยของโครงการ CSMJU2030
 
 มาตรฐานกลางอยู่ใน `standards/` (submodule ของ CSMJU2030/csmju2030-standards)
-สร้างจาก standards v1.0.0
+สร้างจาก standards v1.7.4
 
 ## เริ่มทำงาน
 
@@ -11,6 +11,3 @@ InternSync — ระบบย่อยของโครงการ CSMJU2030
 git submodule update --init --remote standards/
 pnpm install
 git checkout -b feature/intern-sync/<เรื่องที่ทำ>
-```
-
-ก่อนเปิด PR อ่าน `standards/docs/github-workflow.md` ข้อ 1
