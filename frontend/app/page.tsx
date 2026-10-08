@@ -75,7 +75,7 @@ export default function InternSyncPage() {
           <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-surface-border bg-surface-border sm:grid-cols-3">
             <div className="flex items-center gap-4 bg-surface p-5">
               <UsersRound aria-hidden="true" className="shrink-0 text-primary" size={22} />
-              <div><p className="text-2xl font-bold text-primary-dark">24</p><p className="text-sm text-muted">นักศึกษาฝึกงาน</p></div>
+              <div><p className="text-2xl font-bold text-primary-dark">52</p><p className="text-sm text-muted">นักศึกษาฝึกงาน</p></div>
             </div>
             <div className="flex items-center gap-4 bg-surface p-5">
               <FileText aria-hidden="true" className="shrink-0 text-primary" size={22} />
