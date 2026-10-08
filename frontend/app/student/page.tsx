@@ -2,16 +2,24 @@
 import { useState } from 'react';
 import { Check, FileText, Send } from 'lucide-react';
 import PortalHeader from '@/src/components/PortalHeader';
+import { submitLogbook } from '@/src/lib/logbooks';
 
 export default function StudentDashboard() {
   const [week, setWeek] = useState('1');
   const [details, setDetails] = useState('');
   const [submittedWeek, setSubmittedWeek] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmittedWeek(week);
-    setDetails('');
+    try {
+      submitLogbook(Number(week), details.trim());
+      setSubmittedWeek(week);
+      setSubmitError(false);
+      setDetails('');
+    } catch {
+      setSubmitError(true);
+    }
   };
 
   return (
@@ -37,8 +45,13 @@ export default function StudentDashboard() {
             {submittedWeek && (
               <div role="status" className="mb-5 flex items-start gap-3 rounded-lg border border-success/20 bg-success-soft p-4 text-sm text-success">
                 <Check aria-hidden="true" className="mt-0.5 shrink-0" size={18} />
-                <p>บันทึกตัวอย่างสัปดาห์ที่ {submittedWeek} เรียบร้อยแล้ว ข้อมูลยังไม่ได้ส่งไปยังระบบจริง</p>
+                <p>ส่งบันทึกสัปดาห์ที่ {submittedWeek} แล้ว รายการจะแสดงในหน้าของอาจารย์นิเทศก์บน browser นี้</p>
               </div>
+            )}
+            {submitError && (
+              <p role="alert" className="mb-5 rounded-lg border border-error/20 bg-error-soft p-4 text-sm text-error">
+                บันทึกไม่สำเร็จ กรุณาตรวจสอบพื้นที่จัดเก็บของ browser แล้วลองอีกครั้ง
+              </p>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
@@ -83,7 +96,7 @@ export default function StudentDashboard() {
               <li className="flex gap-2"><Check aria-hidden="true" className="mt-0.5 shrink-0 text-success" size={16} />สรุปสิ่งที่ได้เรียนรู้</li>
               <li className="flex gap-2"><Check aria-hidden="true" className="mt-0.5 shrink-0 text-success" size={16} />ตรวจสอบสัปดาห์ให้ถูกต้อง</li>
             </ul>
-            <p className="mt-5 border-t border-surface-border pt-4 text-xs leading-relaxed text-muted">โหมดตัวอย่าง: การส่งข้อมูลในหน้านี้ยังไม่เชื่อมต่อฐานข้อมูล</p>
+            <p className="mt-5 border-t border-surface-border pt-4 text-xs leading-relaxed text-muted">โหมดตัวอย่าง: ข้อมูลจะแชร์ระหว่างสองหน้าบน browser นี้ และยังไม่ได้บันทึกลงเซิร์ฟเวอร์</p>
           </aside>
         </div>
         <p className="mt-8 text-center text-xs text-muted">InternSync · มหาวิทยาลัยแม่โจ้</p>
