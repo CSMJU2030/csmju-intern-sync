@@ -6,9 +6,7 @@ export class HealthController {
   @Get()
   check() {
     return {
-      success: true,
-      data: { status: 'ok' },
-      meta: {}
+      status: 'ok'
     };
   }
 }
