@@ -4,6 +4,7 @@
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
     "start": "node dist/src/main.js",
+    "generate:openapi": "ts-node src/openapi.generate.ts",
     "prisma:generate": "prisma generate",
     "prisma:deploy": "prisma migrate deploy",
     "typecheck": "prisma generate && tsc --noEmit -p tsconfig.json"
@@ -12,16 +13,20 @@
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/swagger": "^11.2.0",
     "@prisma/adapter-pg": "7.9.1",
     "@prisma/client": "7.9.1",
     "dotenv": "^16.4.7",
+    "jose": "^5.10.0",
     "pg": "^8.23.0",
     "prisma": "7.9.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5.9.0"
   }
 }
