@@ -4,7 +4,7 @@
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
     "start": "node dist/src/main.js",
-    "generate:openapi": "ts-node src/openapi.generate.ts",
+    "generate:openapi": "prisma generate && ts-node src/openapi.generate.ts",
     "prisma:generate": "prisma generate",
     "prisma:deploy": "prisma migrate deploy",
     "typecheck": "prisma generate && tsc --noEmit -p tsconfig.json"
