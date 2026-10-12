@@ -122,7 +122,12 @@ export default function TeacherDashboard() {
                       weekLogbooks.map((logbook) => (
                         <article key={logbook.id} className="border-b border-surface-border pb-4 last:border-0 last:pb-0">
                           <div className="flex flex-wrap items-start justify-between gap-2">
-                            <p className="font-semibold">{logbook.studentName}</p>
+                            <div>
+                              <p className="font-semibold">{logbook.studentName}</p>
+                              {logbook.studentId && (
+                                <p className="mt-1 text-xs text-muted">รหัสนักศึกษา {logbook.studentId}</p>
+                              )}
+                            </div>
                             <span className={`rounded-full px-2 py-1 text-xs font-semibold ${logbook.status === 'approved' ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning'}`}>
                               {logbook.status === 'approved' ? 'อนุมัติแล้ว' : 'รอตรวจ'}
                             </span>

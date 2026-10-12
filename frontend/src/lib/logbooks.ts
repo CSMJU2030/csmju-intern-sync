@@ -1,6 +1,7 @@
 export type Logbook = {
   id: string;
   studentName: string;
+  studentId?: string;
   week: number;
   details: string;
   submittedAt: string;
@@ -46,6 +47,8 @@ function isLogbook(value: unknown): value is Logbook {
   return (
     typeof logbook.id === "string" &&
     typeof logbook.studentName === "string" &&
+    (logbook.studentId === undefined ||
+      typeof logbook.studentId === "string") &&
     typeof logbook.week === "number" &&
     typeof logbook.details === "string" &&
     typeof logbook.submittedAt === "string" &&
@@ -70,13 +73,22 @@ function writeLogbooks(logbooks: Logbook[]) {
 }
 
 export function submitLogbook(
+  studentName: string,
+  studentId: string,
   week: number,
   details: string,
   location?: Logbook["location"],
 ): Logbook {
+  const normalizedStudentName = studentName.trim();
+  const normalizedStudentId = studentId.trim();
+  if (!normalizedStudentName || !normalizedStudentId) {
+    throw new Error("Student name and ID are required to submit a logbook");
+  }
+
   const logbook: Logbook = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    studentName: "นายณัฐพงษ์ บุญสถิตย์",
+    studentName: normalizedStudentName,
+    studentId: normalizedStudentId,
     week,
     details,
     submittedAt: new Date().toISOString(),
