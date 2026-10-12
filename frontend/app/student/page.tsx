@@ -5,6 +5,8 @@ import PortalHeader from '@/src/components/PortalHeader';
 import { submitLogbook } from '@/src/lib/logbooks';
 
 export default function StudentDashboard() {
+  const [studentName, setStudentName] = useState('');
+  const [studentId, setStudentId] = useState('');
   const [week, setWeek] = useState('1');
   const [details, setDetails] = useState('');
   const [submittedWeek, setSubmittedWeek] = useState<string | null>(null);
@@ -14,6 +16,13 @@ export default function StudentDashboard() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const normalizedStudentName = studentName.trim();
+    const normalizedStudentId = studentId.trim();
+    if (!normalizedStudentName || !normalizedStudentId) {
+      setSubmitError('กรุณากรอกชื่อ-นามสกุลและรหัสนักศึกษาให้ครบถ้วน');
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitError('');
     setLocationNotice('');
@@ -84,7 +93,13 @@ export default function StudentDashboard() {
         }
       }
 
-      submitLogbook(Number(week), details.trim(), location);
+      submitLogbook(
+        normalizedStudentName,
+        normalizedStudentId,
+        Number(week),
+        details.trim(),
+        location,
+      );
       setSubmittedWeek(week);
       setLocationNotice(
         location
@@ -138,6 +153,38 @@ export default function StudentDashboard() {
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label htmlFor="studentName" className="mb-2 block text-sm font-semibold">ชื่อ-นามสกุล</label>
+                <input
+                  id="studentName"
+                  name="studentName"
+                  type="text"
+                  autoComplete="name"
+                  value={studentName}
+                  onChange={(event) => setStudentName(event.target.value)}
+                  maxLength={120}
+                  className="w-full rounded-lg border border-surface-border bg-surface px-4 py-3 text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  placeholder="กรอกชื่อและนามสกุล"
+                  required
+                />
+              </div>
+
+              <div>
+                <label htmlFor="studentId" className="mb-2 block text-sm font-semibold">รหัสนักศึกษา</label>
+                <input
+                  id="studentId"
+                  name="studentId"
+                  type="text"
+                  autoComplete="off"
+                  value={studentId}
+                  onChange={(event) => setStudentId(event.target.value)}
+                  maxLength={32}
+                  className="w-full rounded-lg border border-surface-border bg-surface px-4 py-3 text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  placeholder="กรอกรหัสนักศึกษา"
+                  required
+                />
+              </div>
+
               <div>
                 <label htmlFor="week" className="mb-2 block text-sm font-semibold">สัปดาห์ที่</label>
                 <select
