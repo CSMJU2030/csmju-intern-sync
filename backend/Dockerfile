@@ -32,6 +32,7 @@ RUN pnpm install --frozen-lockfile --prod --filter backend... --store-dir /tmp/p
  && rm -rf /tmp/pnpm-store /root/.cache/pnpm
 
 COPY --from=builder /app/backend/dist ./backend/dist
+COPY dumb-database.json ./backend/dumb-database.json
 COPY --chmod=755 backend/docker/entrypoint.sh ./backend/docker/entrypoint.sh
 
 USER node

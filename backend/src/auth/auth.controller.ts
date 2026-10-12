@@ -10,7 +10,9 @@ import {
 import { ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import type { JWTPayload } from 'jose';
+import { resolve } from 'node:path';
 import { AccessTokenVerifier } from './access-token-verifier.service';
 
 const STATE_MAX_AGE_MS = 600_000;
@@ -188,7 +190,11 @@ function readCookie(request: Request, name: string): string | undefined {
   for (const pair of cookieHeader.split(';')) {
     const separator = pair.indexOf('=');
     if (separator < 0 || pair.slice(0, separator).trim() !== name) continue;
-    return decodeURIComponent(pair.slice(separator + 1).trim());
+    try {
+      return decodeURIComponent(pair.slice(separator + 1).trim());
+    } catch {
+      return undefined;
+    }
   }
   return undefined;
 }
@@ -210,6 +216,135 @@ function unauthorized(response: Response, request: Request): Response {
       '<!doctype html><html lang="en"><meta charset="utf-8"><title>Sign in required</title><p>Sign in again to continue.</p><a href="/auth/login">Sign in</a></html>',
     );
   }
+  return response.status(401).json({
+    success: false,
+    error: { code: 'UNAUTHORIZED', message: 'Authentication is required' },
+    meta: {},
+  });
+}
+
+interface MockUserProfile {
+  id: string;
+  name: string;
+  studentId: string | null;
+}
+
+interface MockUserDatabase {
+  users: MockUserProfile[];
+}
+
+@Controller({ path: 'me', version: '1' })
+@ApiTags('Auth')
+export class MeController {
+  private readonly sessionCookieName = `${(process.env.SUBSYSTEM_ID ?? 'csmju-intern-sync').replace(/[^a-zA-Z0-9_]/g, '_')}_access_token`;
+  private readonly allowedRoles = new Set(
+    (process.env.SUBSYSTEM_ALLOWED_ROLES ?? 'student,staff,lecturer')
+      .split(',')
+      .map((role) => role.trim())
+      .filter(Boolean),
+  );
+
+  constructor(private readonly tokenVerifier: AccessTokenVerifier) {}
+
+  @Get()
+  @ApiResponse({
+    status: 200,
+    description: 'Returns the authenticated user profile',
+    schema: {
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean', enum: [true] },
+        data: {
+          type: 'object',
+          required: ['id', 'email', 'name', 'role', 'studentId'],
+          properties: {
+            id: { type: 'string', description: 'The user sub from the verified Core Hub token' },
+            email: { type: 'string', nullable: true },
+            name: { type: 'string', nullable: true },
+            role: { type: 'string' },
+            studentId: { type: 'string', nullable: true },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Authentication is required' })
+  @ApiResponse({ status: 403, description: 'The account role is not allowed' })
+  async me(
+    @Req() request: Request,
+    @Res() response: Response,
+  ): Promise<Response> {
+    setAuthHeaders(response);
+    const authorization = request.headers.authorization;
+    const bearer = authorization === undefined
+      ? undefined
+      : /^Bearer ([^\s]+)$/i.exec(authorization)?.[1];
+    const accessToken = authorization === undefined
+      ? readCookie(request, this.sessionCookieName)
+      : bearer;
+    if (!accessToken) return unauthorizedJson(response);
+
+    let payload: JWTPayload;
+    try {
+      payload = await this.tokenVerifier.verify(accessToken);
+    } catch {
+      return unauthorizedJson(response);
+    }
+
+    if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
+      return unauthorizedJson(response);
+    }
+
+    if (typeof payload.role !== 'string' || !this.allowedRoles.has(payload.role)) {
+      return response.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Your account cannot access this subsystem' },
+        meta: {},
+      });
+    }
+
+    const profile = await findMockUserProfile(payload.sub);
+    return response.status(200).json({
+      success: true,
+      data: {
+        id: payload.sub,
+        email: typeof payload.email === 'string' ? payload.email : null,
+        name: profile?.name ?? null,
+        role: payload.role,
+        studentId: profile?.studentId ?? null,
+      },
+    });
+  }
+}
+
+async function findMockUserProfile(id: string): Promise<MockUserProfile | undefined> {
+  const contents = await readFile(resolve(process.cwd(), 'dumb-database.json'), 'utf8');
+  const database: unknown = JSON.parse(contents);
+  if (!isMockUserDatabase(database)) {
+    throw new Error('Invalid dumb-database.json mock user data');
+  }
+  return database.users.find((user) => user.id === id);
+}
+
+function isMockUserDatabase(value: unknown): value is MockUserDatabase {
+  if (typeof value !== 'object' || value === null || !('users' in value) || !Array.isArray(value.users)) {
+    return false;
+  }
+  return value.users.every(
+    (user: unknown) =>
+      typeof user === 'object' &&
+      user !== null &&
+      'id' in user &&
+      typeof user.id === 'string' &&
+      'name' in user &&
+      typeof user.name === 'string' &&
+      'studentId' in user &&
+      (typeof user.studentId === 'string' || user.studentId === null),
+  );
+}
+
+function unauthorizedJson(response: Response): Response {
   return response.status(401).json({
     success: false,
     error: { code: 'UNAUTHORIZED', message: 'Authentication is required' },

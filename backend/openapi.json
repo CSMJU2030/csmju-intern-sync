@@ -98,6 +98,76 @@
           "Auth"
         ]
       }
+    },
+    "/api/v1/me": {
+      "get": {
+        "operationId": "MeController_me_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Returns the authenticated user profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "email",
+                        "name",
+                        "role",
+                        "studentId"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "The user sub from the verified Core Hub token"
+                        },
+                        "email": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "name": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "role": {
+                          "type": "string"
+                        },
+                        "studentId": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication is required"
+          },
+          "403": {
+            "description": "The account role is not allowed"
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
     }
   },
   "info": {
