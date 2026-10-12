@@ -10,9 +10,7 @@ import {
 import { ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import type { JWTPayload } from 'jose';
-import { resolve } from 'node:path';
 import { AccessTokenVerifier } from './access-token-verifier.service';
 
 const STATE_MAX_AGE_MS = 600_000;
@@ -223,15 +221,20 @@ function unauthorized(response: Response, request: Request): Response {
   });
 }
 
-interface MockUserProfile {
-  id: string;
-  name: string;
-  studentId: string | null;
+interface CoreHubPersonProfile {
+  fullNameTh: string;
+  personCode: string;
 }
 
-interface MockUserDatabase {
-  users: MockUserProfile[];
-}
+type CoreHubProfileLookup =
+  | { ok: true; profile: CoreHubPersonProfile | null }
+  | {
+      ok: false;
+      status: 401 | 403 | 503;
+      code: string;
+      message: string;
+      retryAfter?: string;
+    };
 
 @Controller({ path: 'me', version: '1' })
 @ApiTags('Auth')
@@ -271,6 +274,7 @@ export class MeController {
   })
   @ApiResponse({ status: 401, description: 'Authentication is required' })
   @ApiResponse({ status: 403, description: 'The account role is not allowed' })
+  @ApiResponse({ status: 503, description: 'Core Hub profile data is unavailable' })
   async me(
     @Req() request: Request,
     @Res() response: Response,
@@ -304,44 +308,149 @@ export class MeController {
       });
     }
 
-    const profile = await findMockUserProfile(payload.sub);
+    const profileLookup = await findCoreHubPersonProfile(accessToken);
+    if (!profileLookup.ok) {
+      if (profileLookup.retryAfter) {
+        response.setHeader('Retry-After', profileLookup.retryAfter);
+      }
+      return response.status(profileLookup.status).json({
+        success: false,
+        error: {
+          code: profileLookup.code,
+          message: profileLookup.message,
+        },
+        meta: {},
+      });
+    }
+
     return response.status(200).json({
       success: true,
       data: {
         id: payload.sub,
         email: typeof payload.email === 'string' ? payload.email : null,
-        name: profile?.name ?? null,
+        name: profileLookup.profile?.fullNameTh ?? null,
         role: payload.role,
-        studentId: profile?.studentId ?? null,
+        studentId: profileLookup.profile?.personCode ?? null,
       },
     });
   }
 }
 
-async function findMockUserProfile(id: string): Promise<MockUserProfile | undefined> {
-  const contents = await readFile(resolve(process.cwd(), 'dumb-database.json'), 'utf8');
-  const database: unknown = JSON.parse(contents);
-  if (!isMockUserDatabase(database)) {
-    throw new Error('Invalid dumb-database.json mock user data');
+async function findCoreHubPersonProfile(
+  accessToken: string,
+): Promise<CoreHubProfileLookup> {
+  const coreHubUrl = process.env.CORE_HUB_URL ?? process.env.CORE_HUB_WEB_URL;
+  if (!coreHubUrl) {
+    return {
+      ok: false,
+      status: 503,
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Core Hub is unavailable',
+    };
   }
-  return database.users.find((user) => user.id === id);
-}
 
-function isMockUserDatabase(value: unknown): value is MockUserDatabase {
-  if (typeof value !== 'object' || value === null || !('users' in value) || !Array.isArray(value.users)) {
-    return false;
+  let upstream: globalThis.Response;
+  try {
+    upstream = await fetch(new URL('/api/v1/people/me', coreHubUrl), {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch {
+    return {
+      ok: false,
+      status: 503,
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Core Hub profile data is unavailable',
+    };
   }
-  return value.users.every(
-    (user: unknown) =>
-      typeof user === 'object' &&
-      user !== null &&
-      'id' in user &&
-      typeof user.id === 'string' &&
-      'name' in user &&
-      typeof user.name === 'string' &&
-      'studentId' in user &&
-      (typeof user.studentId === 'string' || user.studentId === null),
-  );
+
+  if (upstream.status === 401) {
+    return {
+      ok: false,
+      status: 401,
+      code: 'UNAUTHORIZED',
+      message: 'Authentication is required',
+    };
+  }
+  if (upstream.status === 403) {
+    return {
+      ok: false,
+      status: 403,
+      code: 'FORBIDDEN',
+      message: 'Your account cannot access profile data',
+    };
+  }
+  if (upstream.status === 429) {
+    const retryAfter = upstream.headers.get('retry-after');
+    return {
+      ok: false,
+      status: 503,
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Core Hub profile data is temporarily unavailable',
+      retryAfter: retryAfter && /^\d{1,4}$/.test(retryAfter) ? retryAfter : '30',
+    };
+  }
+  if (!upstream.ok) {
+    return {
+      ok: false,
+      status: 503,
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Core Hub profile data is unavailable',
+    };
+  }
+
+  let result: unknown;
+  try {
+    result = await upstream.json();
+  } catch {
+    return {
+      ok: false,
+      status: 503,
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Core Hub returned an invalid profile response',
+    };
+  }
+
+  if (
+    typeof result !== 'object' ||
+    result === null ||
+    !('success' in result) ||
+    result.success !== true ||
+    !('data' in result)
+  ) {
+    return {
+      ok: false,
+      status: 503,
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Core Hub returned an invalid profile response',
+    };
+  }
+
+  if (result.data === null) {
+    return { ok: true, profile: null };
+  }
+
+  if (
+    typeof result.data !== 'object' ||
+    !('fullNameTh' in result.data) ||
+    typeof result.data.fullNameTh !== 'string' ||
+    !('personCode' in result.data) ||
+    typeof result.data.personCode !== 'string'
+  ) {
+    return {
+      ok: false,
+      status: 503,
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Core Hub returned an invalid profile response',
+    };
+  }
+
+  const profile: CoreHubPersonProfile = {
+    fullNameTh: result.data.fullNameTh,
+    personCode: result.data.personCode,
+  };
+  return { ok: true, profile };
 }
 
 function unauthorizedJson(response: Response): Response {

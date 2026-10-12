@@ -1,25 +1,48 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, FileText, Send } from 'lucide-react';
 import PortalHeader from '@/src/components/PortalHeader';
+import { getAuthenticatedProfile, type AuthenticatedProfile } from '@/src/lib/auth';
 import { submitLogbook } from '@/src/lib/logbooks';
 
 export default function StudentDashboard() {
-  const [studentName, setStudentName] = useState('');
-  const [studentId, setStudentId] = useState('');
+  const [profile, setProfile] = useState<AuthenticatedProfile | null>(null);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState('');
   const [week, setWeek] = useState('1');
   const [details, setDetails] = useState('');
   const [submittedWeek, setSubmittedWeek] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState('');
   const [locationNotice, setLocationNotice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const hasStudentIdentity = Boolean(
+    profile?.name?.trim() && profile.studentId?.trim(),
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    getAuthenticatedProfile(controller.signal)
+      .then(setProfile)
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setProfileError(
+          error instanceof Error
+            ? error.message
+            : 'ไม่สามารถโหลดข้อมูลผู้ใช้ได้ กรุณาลองอีกครั้ง',
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsProfileLoading(false);
+      });
+
+    return () => controller.abort();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const normalizedStudentName = studentName.trim();
-    const normalizedStudentId = studentId.trim();
-    if (!normalizedStudentName || !normalizedStudentId) {
-      setSubmitError('กรุณากรอกชื่อ-นามสกุลและรหัสนักศึกษาให้ครบถ้วน');
+    if (!profile) {
+      setSubmitError('ไม่พบข้อมูลผู้ใช้ที่เข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่');
       return;
     }
 
@@ -93,9 +116,18 @@ export default function StudentDashboard() {
         }
       }
 
+      const currentProfile = await getAuthenticatedProfile();
+      setProfile(currentProfile);
+      if (!currentProfile.name?.trim() || !currentProfile.studentId?.trim()) {
+        throw new Error('ไม่พบชื่อหรือรหัสนักศึกษาในข้อมูล profile กรุณาติดต่อผู้ดูแลระบบ');
+      }
+
       submitLogbook(
-        normalizedStudentName,
-        normalizedStudentId,
+        {
+          id: currentProfile.id,
+          name: currentProfile.name,
+          studentId: currentProfile.studentId,
+        },
         Number(week),
         details.trim(),
         location,
@@ -109,8 +141,12 @@ export default function StudentDashboard() {
           : notice || 'ส่งบันทึกโดยไม่มีพิกัด',
       );
       setDetails('');
-    } catch {
-      setSubmitError('บันทึกไม่สำเร็จ กรุณาตรวจสอบพื้นที่จัดเก็บของ browser แล้วลองอีกครั้ง');
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : 'บันทึกไม่สำเร็จ กรุณาตรวจสอบพื้นที่จัดเก็บของ browser แล้วลองอีกครั้ง',
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -151,40 +187,17 @@ export default function StudentDashboard() {
             <p className="mb-5 rounded-lg bg-background p-3 text-xs leading-relaxed text-muted">
               เมื่อกดส่ง ระบบจะขออนุญาตใช้ตำแหน่งจากเบราว์เซอร์ และส่งพิกัดให้ OpenStreetMap Nominatim เพื่อระบุประเทศ หากไม่อนุญาตยังส่งบันทึกได้โดยไม่มีพิกัด
             </p>
+            <div role="status" aria-live="polite" className="mb-5 rounded-lg bg-primary-soft p-3 text-sm text-primary">
+              {isProfileLoading
+                ? 'กำลังโหลดข้อมูลผู้ใช้ที่เข้าสู่ระบบ...'
+                : profileError
+                  ? profileError
+                  : hasStudentIdentity
+                    ? `กำลังส่งในชื่อ ${profile?.name?.trim()} · รหัสนักศึกษา ${profile?.studentId?.trim()}`
+                    : 'ไม่พบชื่อหรือรหัสนักศึกษาใน profile ของผู้ใช้'}
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label htmlFor="studentName" className="mb-2 block text-sm font-semibold">ชื่อ-นามสกุล</label>
-                <input
-                  id="studentName"
-                  name="studentName"
-                  type="text"
-                  autoComplete="name"
-                  value={studentName}
-                  onChange={(event) => setStudentName(event.target.value)}
-                  maxLength={120}
-                  className="w-full rounded-lg border border-surface-border bg-surface px-4 py-3 text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  placeholder="กรอกชื่อและนามสกุล"
-                  required
-                />
-              </div>
-
-              <div>
-                <label htmlFor="studentId" className="mb-2 block text-sm font-semibold">รหัสนักศึกษา</label>
-                <input
-                  id="studentId"
-                  name="studentId"
-                  type="text"
-                  autoComplete="off"
-                  value={studentId}
-                  onChange={(event) => setStudentId(event.target.value)}
-                  maxLength={32}
-                  className="w-full rounded-lg border border-surface-border bg-surface px-4 py-3 text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  placeholder="กรอกรหัสนักศึกษา"
-                  required
-                />
-              </div>
-
               <div>
                 <label htmlFor="week" className="mb-2 block text-sm font-semibold">สัปดาห์ที่</label>
                 <select
@@ -212,7 +225,7 @@ export default function StudentDashboard() {
                 <p className="mt-2 text-right text-xs text-muted">{details.length}/2,000 ตัวอักษร</p>
               </div>
 
-              <button type="submit" disabled={isSubmitting} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 font-semibold text-white transition hover:bg-primary-dark disabled:cursor-wait disabled:opacity-60 sm:w-auto">
+              <button type="submit" disabled={isSubmitting || isProfileLoading || !hasStudentIdentity} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 font-semibold text-white transition hover:bg-primary-dark disabled:cursor-wait disabled:opacity-60 sm:w-auto">
                 <Send aria-hidden="true" size={17} />
                 {isSubmitting ? 'กำลังตรวจสอบตำแหน่ง...' : 'ส่งบันทึก'}
               </button>

@@ -185,6 +185,9 @@
           },
           "403": {
             "description": "The account role is not allowed"
+          },
+          "503": {
+            "description": "Core Hub profile data is unavailable"
           }
         },
         "tags": [

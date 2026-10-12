@@ -1,5 +1,6 @@
 export type Logbook = {
   id: string;
+  coreUserId?: string;
   studentName: string;
   studentId?: string;
   week: number;
@@ -46,6 +47,8 @@ function isLogbook(value: unknown): value is Logbook {
   const logbook = value as Record<string, unknown>;
   return (
     typeof logbook.id === "string" &&
+    (logbook.coreUserId === undefined ||
+      typeof logbook.coreUserId === "string") &&
     typeof logbook.studentName === "string" &&
     (logbook.studentId === undefined ||
       typeof logbook.studentId === "string") &&
@@ -73,20 +76,24 @@ function writeLogbooks(logbooks: Logbook[]) {
 }
 
 export function submitLogbook(
-  studentName: string,
-  studentId: string,
+  identity: {
+    id: string;
+    name: string;
+    studentId: string;
+  },
   week: number,
   details: string,
   location?: Logbook["location"],
 ): Logbook {
-  const normalizedStudentName = studentName.trim();
-  const normalizedStudentId = studentId.trim();
-  if (!normalizedStudentName || !normalizedStudentId) {
-    throw new Error("Student name and ID are required to submit a logbook");
+  const normalizedStudentName = identity.name.trim();
+  const normalizedStudentId = identity.studentId.trim();
+  if (!identity.id || !normalizedStudentName || !normalizedStudentId) {
+    throw new Error("Authenticated user ID, name, and student ID are required");
   }
 
   const logbook: Logbook = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    coreUserId: identity.id,
     studentName: normalizedStudentName,
     studentId: normalizedStudentId,
     week,
