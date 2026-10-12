@@ -1,6 +1,7 @@
 'use client';
+import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
-import { Check, ChevronDown, ClipboardCheck, MapPin, Navigation } from 'lucide-react';
+import { Check, ChevronDown, ClipboardCheck, MapPin } from 'lucide-react';
 import PortalHeader from '@/src/components/PortalHeader';
 import {
   approveLogbook,
@@ -9,9 +10,21 @@ import {
   type Logbook,
 } from '@/src/lib/logbooks';
 
+const SupervisionMap = dynamic(
+  () => import('@/src/components/SupervisionMap'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[440px] items-center justify-center rounded-lg bg-background text-sm text-muted">
+        กำลังโหลดแผนที่...
+      </div>
+    ),
+  },
+);
+
 export default function TeacherDashboard() {
-  const [gpsStatus, setGpsStatus] = useState('ยังไม่ได้บันทึกพิกัด');
   const [logbooks, setLogbooks] = useState<Logbook[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState('all');
 
   useEffect(() => {
     const refreshLogbooks = () => setLogbooks(readLogbooks());
@@ -25,15 +38,33 @@ export default function TeacherDashboard() {
     };
   }, []);
 
-  const handleCheckIn = () => {
-    setGpsStatus('บันทึกพิกัดตัวอย่างแล้ว · 18.89, 99.01');
-  };
-
   const handleApprove = (id: string) => {
     setLogbooks(approveLogbook(id));
   };
 
   const pendingCount = logbooks.filter((logbook) => logbook.status === 'pending').length;
+  const countries = Array.from(
+    new Map(
+      logbooks.flatMap((logbook) =>
+        logbook.location?.countryCode && logbook.location.countryName
+          ? [[logbook.location.countryCode, logbook.location.countryName] as const]
+          : [],
+      ),
+    ),
+  ).sort((first, second) => first[1].localeCompare(second[1], 'th'));
+  const filteredLogbooks =
+    selectedCountry === 'all'
+      ? logbooks
+      : logbooks.filter(
+          (logbook) =>
+            (selectedCountry === 'unknown' &&
+              logbook.location &&
+              !logbook.location.countryCode) ||
+            logbook.location?.countryCode === selectedCountry,
+        );
+  const locatedLogbookCount = filteredLogbooks.filter(
+    (logbook) => logbook.location,
+  ).length;
   const weeks = Array.from({ length: 8 }, (_, index) => index + 1);
 
   return (
@@ -46,7 +77,7 @@ export default function TeacherDashboard() {
             <h1 className="mt-2 font-display text-3xl font-bold text-primary-dark">ติดตามความก้าวหน้านักศึกษา</h1>
             <p className="mt-2 text-base text-muted">ตรวจบันทึกการฝึกงานและบันทึกการนิเทศในสถานประกอบการ</p>
           </div>
-          <span className="rounded-full bg-warning-soft px-3 py-1 text-xs font-semibold text-warning">ข้อมูลตัวอย่าง</span>
+          <span className="rounded-full bg-warning-soft px-3 py-1 text-xs font-semibold text-warning">Logbook: โหมดตัวอย่าง</span>
         </div>
 
         <div className="mb-6 grid gap-4 sm:grid-cols-3">
@@ -117,20 +148,34 @@ export default function TeacherDashboard() {
           </div>
         </section>
 
-        <section aria-labelledby="visit-title" className="max-w-xl rounded-xl border border-surface-border bg-surface p-5 sm:p-6">
+        <section aria-labelledby="visit-title" className="rounded-xl border border-surface-border bg-surface p-5 sm:p-6">
             <div className="mb-5 flex items-center gap-3 border-b border-surface-border pb-4">
               <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-success-soft text-success"><MapPin aria-hidden="true" size={20} /></span>
-              <div><h2 id="visit-title" className="font-bold">บันทึกการนิเทศ</h2><p className="text-sm text-muted">สถานประกอบการ · เชียงใหม่</p></div>
+              <div><h2 id="visit-title" className="font-bold">แผนที่โลก — ตำแหน่งขณะส่งบันทึก</h2><p className="text-sm text-muted">เลือกประเทศเพื่อกรองตำแหน่งที่นักศึกษาแนบมา</p></div>
             </div>
 
-            <div className="flex min-h-36 flex-col items-center justify-center rounded-lg border border-dashed border-surface-border bg-background px-5 py-6 text-center">
-              <MapPin aria-hidden="true" className="mb-2 text-primary" size={25} />
-              <p className="text-sm font-semibold text-foreground">{gpsStatus}</p>
-              <p className="mt-1 text-xs text-muted">โหมดตัวอย่าง · ข้อมูล logbook เก็บไว้ใน browser นี้</p>
+            <div className="mb-4 max-w-sm">
+              <label htmlFor="country-filter" className="mb-2 block text-sm font-semibold">ประเทศ</label>
+              <select
+                id="country-filter"
+                value={selectedCountry}
+                onChange={(event) => setSelectedCountry(event.target.value)}
+                className="w-full rounded-lg border border-surface-border bg-surface px-4 py-3 text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                <option value="all">ทุกประเทศ</option>
+                {countries.map(([countryCode, countryName]) => (
+                  <option key={countryCode} value={countryCode}>{countryName}</option>
+                ))}
+                {logbooks.some(
+                  (logbook) =>
+                    logbook.location && !logbook.location.countryCode,
+                ) && <option value="unknown">ไม่ทราบประเทศ</option>}
+              </select>
             </div>
-            <button onClick={handleCheckIn} className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg border border-primary/25 bg-primary-soft px-4 py-3 font-semibold text-primary transition hover:bg-primary/10">
-              <Navigation aria-hidden="true" size={17} />บันทึกพิกัดตัวอย่าง
-            </button>
+            <SupervisionMap logbooks={filteredLogbooks} />
+            <p className="mt-3 text-xs text-muted">
+              แสดง {locatedLogbookCount} จาก {filteredLogbooks.length} บันทึกในตัวกรองที่มีพิกัด · พิกัดเป็นตำแหน่งอุปกรณ์ ไม่ใช่การยืนยันสถานที่ฝึกงาน
+            </p>
         </section>
         <p className="mt-8 text-center text-xs text-muted">InternSync · มหาวิทยาลัยแม่โจ้</p>
       </main>

@@ -8,17 +8,96 @@ export default function StudentDashboard() {
   const [week, setWeek] = useState('1');
   const [details, setDetails] = useState('');
   const [submittedWeek, setSubmittedWeek] = useState<string | null>(null);
-  const [submitError, setSubmitError] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [locationNotice, setLocationNotice] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setIsSubmitting(true);
+    setSubmitError('');
+    setLocationNotice('');
+
     try {
-      submitLogbook(Number(week), details.trim());
+      let location:
+        | {
+            latitude: number;
+            longitude: number;
+            countryCode?: string;
+            countryName?: string;
+          }
+        | undefined;
+      let notice = '';
+
+      if (!navigator.geolocation) {
+        notice = 'อุปกรณ์หรือเบราว์เซอร์นี้ไม่รองรับตำแหน่ง จึงส่งบันทึกโดยไม่แนบพิกัด';
+      } else {
+        try {
+          const position = await new Promise<GeolocationPosition>(
+            (resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: false,
+                maximumAge: 60_000,
+                timeout: 10_000,
+              });
+            },
+          );
+          location = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          };
+          try {
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(location.latitude)}&lon=${encodeURIComponent(location.longitude)}&zoom=3&addressdetails=1&accept-language=th`,
+              { headers: { Accept: 'application/json' } },
+            );
+            if (!response.ok) {
+              throw new Error(`Country lookup failed (HTTP ${response.status})`);
+            }
+
+            const result: unknown = await response.json();
+            if (
+              typeof result === 'object' &&
+              result !== null &&
+              'address' in result &&
+              typeof result.address === 'object' &&
+              result.address !== null &&
+              'country' in result.address &&
+              typeof result.address.country === 'string' &&
+              'country_code' in result.address &&
+              typeof result.address.country_code === 'string'
+            ) {
+              location.countryCode = result.address.country_code.toLowerCase();
+              location.countryName = result.address.country;
+            } else {
+              notice = 'แนบพิกัดแล้ว แต่ไม่สามารถระบุประเทศได้';
+            }
+          } catch {
+            notice = 'แนบพิกัดแล้ว แต่ค้นหาประเทศไม่สำเร็จ';
+          }
+        } catch (error) {
+          const geolocationError = error as GeolocationPositionError;
+          notice =
+            geolocationError.code === geolocationError.PERMISSION_DENIED
+              ? 'ไม่ได้รับอนุญาตให้เข้าถึงตำแหน่ง จึงส่งบันทึกโดยไม่แนบพิกัด'
+              : 'ไม่สามารถระบุตำแหน่งได้ จึงส่งบันทึกโดยไม่แนบพิกัด';
+        }
+      }
+
+      submitLogbook(Number(week), details.trim(), location);
       setSubmittedWeek(week);
-      setSubmitError(false);
+      setLocationNotice(
+        location
+          ? location.countryName
+            ? `แนบพิกัดแล้ว · ประเทศ${location.countryName}`
+            : notice || 'แนบพิกัดแล้ว แต่ไม่สามารถระบุประเทศได้'
+          : notice || 'ส่งบันทึกโดยไม่มีพิกัด',
+      );
       setDetails('');
     } catch {
-      setSubmitError(true);
+      setSubmitError('บันทึกไม่สำเร็จ กรุณาตรวจสอบพื้นที่จัดเก็บของ browser แล้วลองอีกครั้ง');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -45,14 +124,18 @@ export default function StudentDashboard() {
             {submittedWeek && (
               <div role="status" className="mb-5 flex items-start gap-3 rounded-lg border border-success/20 bg-success-soft p-4 text-sm text-success">
                 <Check aria-hidden="true" className="mt-0.5 shrink-0" size={18} />
-                <p>ส่งบันทึกสัปดาห์ที่ {submittedWeek} แล้ว รายการจะแสดงในหน้าของอาจารย์นิเทศก์บน browser นี้</p>
+                <div>
+                  <p>ส่งบันทึกสัปดาห์ที่ {submittedWeek} แล้ว รายการจะแสดงในหน้าของอาจารย์นิเทศก์บน browser นี้</p>
+                  {locationNotice && <p className="mt-1">{locationNotice}</p>}
+                </div>
               </div>
             )}
             {submitError && (
-              <p role="alert" className="mb-5 rounded-lg border border-error/20 bg-error-soft p-4 text-sm text-error">
-                บันทึกไม่สำเร็จ กรุณาตรวจสอบพื้นที่จัดเก็บของ browser แล้วลองอีกครั้ง
-              </p>
+              <p role="alert" className="mb-5 rounded-lg border border-error/20 bg-error-soft p-4 text-sm text-error">{submitError}</p>
             )}
+            <p className="mb-5 rounded-lg bg-background p-3 text-xs leading-relaxed text-muted">
+              เมื่อกดส่ง ระบบจะขออนุญาตใช้ตำแหน่งจากเบราว์เซอร์ และส่งพิกัดให้ OpenStreetMap Nominatim เพื่อระบุประเทศ หากไม่อนุญาตยังส่งบันทึกได้โดยไม่มีพิกัด
+            </p>
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
@@ -82,9 +165,9 @@ export default function StudentDashboard() {
                 <p className="mt-2 text-right text-xs text-muted">{details.length}/2,000 ตัวอักษร</p>
               </div>
 
-              <button type="submit" className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 font-semibold text-white transition hover:bg-primary-dark sm:w-auto">
+              <button type="submit" disabled={isSubmitting} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 font-semibold text-white transition hover:bg-primary-dark disabled:cursor-wait disabled:opacity-60 sm:w-auto">
                 <Send aria-hidden="true" size={17} />
-                ส่งบันทึก
+                {isSubmitting ? 'กำลังตรวจสอบตำแหน่ง...' : 'ส่งบันทึก'}
               </button>
             </form>
           </section>
